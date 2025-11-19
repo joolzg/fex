@@ -4,10 +4,20 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+/* File tracking structure for .fex files */
+typedef struct fex_file_entry {
+  int fd;                      /* File descriptor */
+  FILE *fp;                    /* FILE pointer (if opened with fopen) */
+  char *original_filename;     /* Original filename */
+  off_t original_size;         /* Original file size */
+  struct fex_file_entry *next; /* Next entry in linked list */
+} fex_file_entry_t;
 
 /* Function pointer types for original functions */
 typedef int (*orig_open_t)(const char *pathname, int flags, ...);
@@ -40,5 +50,13 @@ typedef int (*orig_fstatat_t)(int dirfd, const char *pathname,
 /* Utility functions */
 void fex_init(void);
 void fex_log(const char *format, ...);
+
+/* File tracking functions */
+int is_fex_file(const char *pathname);
+void track_fex_file_fd(int fd, const char *pathname, int flags);
+void track_fex_file_fp(FILE *fp, const char *pathname, const char *mode);
+void untrack_fex_file_fd(int fd);
+void untrack_fex_file_fp(FILE *fp);
+void print_fex_files_status(void);
 
 #endif // FEX_H

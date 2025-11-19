@@ -40,6 +40,10 @@ static orig_fstatat_t orig_fstatat = NULL;
 /* Debug logging flag */
 static int debug_enabled = 0;
 
+/* .fex file tracking */
+static fex_file_entry_t *fex_files_head = NULL;
+static pthread_mutex_t fex_files_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 /* Initialization function */
 void fex_init(void) {
   static int initialized = 0;
@@ -48,6 +52,11 @@ void fex_init(void) {
 
   /* Check if debug logging is enabled */
   debug_enabled = getenv("FEX_DEBUG") != NULL;
+
+  /* Check if status should be printed on exit */
+  if (getenv("FEX_SHOW_STATUS")) {
+    atexit(print_fex_files_status);
+  }
 
   /* Load original function pointers */
   orig_open = (orig_open_t)dlsym(RTLD_NEXT, "open");
@@ -91,6 +100,164 @@ void fex_log(const char *format, ...) {
   va_end(args);
 }
 
+/* ========== .FEX FILE TRACKING FUNCTIONS ========== */
+
+/* Check if a file has .fex extension */
+int is_fex_file(const char *pathname) {
+  if (!pathname)
+    return 0;
+
+  const char *ext = strrchr(pathname, '.');
+  return (ext && strcmp(ext, ".fex") == 0);
+}
+
+/* Track a .fex file opened with file descriptor */
+void track_fex_file_fd(int fd, const char *pathname, int flags) {
+  if (!is_fex_file(pathname) || fd < 0)
+    return;
+
+  /* Don't track files opened for write operations */
+  if (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)) {
+    fex_log("Skipping .fex file tracking (opened for write): fd=%d, "
+            "filename=%s, flags=0x%x\n",
+            fd, pathname, flags);
+    return;
+  }
+
+  pthread_mutex_lock(&fex_files_mutex);
+
+  /* Get file size */
+  struct stat st;
+  off_t file_size = 0;
+  if (orig_fstat(fd, &st) == 0) {
+    file_size = st.st_size;
+  }
+
+  /* Create new entry */
+  fex_file_entry_t *entry = malloc(sizeof(fex_file_entry_t));
+  if (entry) {
+    entry->fd = fd;
+    entry->fp = NULL;
+    entry->original_filename = strdup(pathname);
+    entry->original_size = file_size;
+    entry->next = fex_files_head;
+    fex_files_head = entry;
+
+    fex_log("Tracking .fex file: fd=%d, filename=%s, size=%ld\n", fd, pathname,
+            file_size);
+  }
+
+  pthread_mutex_unlock(&fex_files_mutex);
+}
+
+/* Track a .fex file opened with FILE pointer */
+void track_fex_file_fp(FILE *fp, const char *pathname, const char *mode) {
+  if (!is_fex_file(pathname) || !fp)
+    return;
+
+  /* Don't track files opened for write operations */
+  if (mode && (strchr(mode, 'w') || strchr(mode, 'a') || strchr(mode, '+') ||
+               strstr(mode, "r+"))) {
+    fex_log("Skipping .fex file tracking (opened for write): fp=%p, "
+            "filename=%s, mode=%s\n",
+            fp, pathname, mode);
+    return;
+  }
+
+  pthread_mutex_lock(&fex_files_mutex);
+
+  /* Get file size via fileno */
+  int fd = orig_fileno(fp);
+  struct stat st;
+  off_t file_size = 0;
+  if (fd >= 0 && orig_fstat(fd, &st) == 0) {
+    file_size = st.st_size;
+  }
+
+  /* Create new entry */
+  fex_file_entry_t *entry = malloc(sizeof(fex_file_entry_t));
+  if (entry) {
+    entry->fd = fd;
+    entry->fp = fp;
+    entry->original_filename = strdup(pathname);
+    entry->original_size = file_size;
+    entry->next = fex_files_head;
+    fex_files_head = entry;
+
+    fex_log("Tracking .fex file: fp=%p, fd=%d, filename=%s, size=%ld\n", fp, fd,
+            pathname, file_size);
+  }
+
+  pthread_mutex_unlock(&fex_files_mutex);
+}
+
+/* Remove tracking for a file descriptor */
+void untrack_fex_file_fd(int fd) {
+  pthread_mutex_lock(&fex_files_mutex);
+
+  fex_file_entry_t **current = &fex_files_head;
+  while (*current) {
+    fex_file_entry_t *entry = *current;
+    if (entry->fd == fd) {
+      *current = entry->next;
+      fex_log("Untracking .fex file: fd=%d, filename=%s\n", entry->fd,
+              entry->original_filename);
+      free(entry->original_filename);
+      free(entry);
+      break;
+    } else {
+      current = &(entry->next);
+    }
+  }
+
+  pthread_mutex_unlock(&fex_files_mutex);
+}
+
+/* Remove tracking for a FILE pointer */
+void untrack_fex_file_fp(FILE *fp) {
+  pthread_mutex_lock(&fex_files_mutex);
+
+  fex_file_entry_t **current = &fex_files_head;
+  while (*current) {
+    fex_file_entry_t *entry = *current;
+    if (entry->fp == fp) {
+      *current = entry->next;
+      fex_log("Untracking .fex file: fp=%p, filename=%s\n", entry->fp,
+              entry->original_filename);
+      free(entry->original_filename);
+      free(entry);
+      break;
+    } else {
+      current = &(entry->next);
+    }
+  }
+
+  pthread_mutex_unlock(&fex_files_mutex);
+}
+
+/* Print status of all tracked .fex files */
+void print_fex_files_status(void) {
+  pthread_mutex_lock(&fex_files_mutex);
+
+  fex_log("=== Currently tracked .fex files ===\n");
+  fex_file_entry_t *current = fex_files_head;
+  int count = 0;
+
+  while (current) {
+    fex_log("  [%d] %s (fd=%d, fp=%p, original_size=%ld)\n", ++count,
+            current->original_filename, current->fd, current->fp,
+            current->original_size);
+    current = current->next;
+  }
+
+  if (count == 0) {
+    fex_log("  No .fex files currently tracked\n");
+  }
+  fex_log("=== End of .fex files status ===\n");
+
+  pthread_mutex_unlock(&fex_files_mutex);
+}
+
 /* Constructor - called when library is loaded */
 __attribute__((constructor)) void fex_constructor(void) { fex_init(); }
 
@@ -111,6 +278,12 @@ int open(const char *pathname, int flags, ...) {
 
   int result = orig_open(pathname, flags, mode);
   fex_log("open() returned %d\n", result);
+
+  /* Track .fex files */
+  if (result >= 0) {
+    track_fex_file_fd(result, pathname, flags);
+  }
+
   return result;
 }
 
@@ -129,12 +302,21 @@ int openat(int dirfd, const char *pathname, int flags, ...) {
 
   int result = orig_openat(dirfd, pathname, flags, mode);
   fex_log("openat() returned %d\n", result);
+
+  /* Track .fex files */
+  if (result >= 0) {
+    track_fex_file_fd(result, pathname, flags);
+  }
+
   return result;
 }
 
 int close(int fd) {
   fex_init();
   fex_log("close(%d)\n", fd);
+
+  /* Untrack .fex files before closing */
+  untrack_fex_file_fd(fd);
 
   int result = orig_close(fd);
   fex_log("close() returned %d\n", result);
@@ -167,12 +349,21 @@ FILE *fopen(const char *pathname, const char *mode) {
 
   FILE *result = orig_fopen(pathname, mode);
   fex_log("fopen() returned %p\n", result);
+
+  /* Track .fex files */
+  if (result) {
+    track_fex_file_fp(result, pathname, mode);
+  }
+
   return result;
 }
 
 int fclose(FILE *stream) {
   fex_init();
   fex_log("fclose(%p)\n", stream);
+
+  /* Untrack .fex files before closing */
+  untrack_fex_file_fp(stream);
 
   int result = orig_fclose(stream);
   fex_log("fclose() returned %d\n", result);

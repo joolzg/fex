@@ -57,6 +57,61 @@ int main() {
     printf("/tmp is a %s\n", S_ISDIR(statbuf.st_mode) ? "directory" : "file");
   }
 
+  /* Test .fex file tracking */
+  printf("\n=== Testing .fex file tracking ===\n");
+
+  /* Create test .fex files */
+  const char *fex_file1 = "/tmp/test1.fex";
+  const char *fex_file2 = "/tmp/test2.fex";
+  const char *regular_file = "/tmp/test.txt";
+
+  /* Test with file descriptors */
+  printf("Creating .fex files with file descriptors...\n");
+  int fd1 = open(fex_file1, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  if (fd1 >= 0) {
+    write(fd1, "Hello from test1.fex\n", 21);
+    close(fd1);
+  }
+
+  int fd2 = open(fex_file2, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+  if (fd2 >= 0) {
+    write(fd2, "Hello from test2.fex - this is a longer file\n", 45);
+    close(fd2);
+  }
+
+  /* Test with FILE pointers */
+  printf("Creating files with FILE pointers...\n");
+  FILE *fp1 = fopen(fex_file1, "a");
+  if (fp1) {
+    fprintf(fp1, "Appended text\n");
+    fclose(fp1);
+  }
+
+  /* Test regular file (should not be tracked) */
+  FILE *fp_regular = fopen(regular_file, "w");
+  if (fp_regular) {
+    fprintf(fp_regular, "This is a regular file, not .fex\n");
+    fclose(fp_regular);
+  }
+
+  /* Test reading .fex files */
+  printf("Reading .fex files...\n");
+  FILE *fp2 = fopen(fex_file2, "r");
+  if (fp2) {
+    char buffer[100];
+    if (fgets(buffer, sizeof(buffer), fp2)) {
+      printf("Content from %s: %s", fex_file2, buffer);
+    }
+
+    printf("(Check debug output for .fex file tracking status)\n");
+    fclose(fp2);
+  }
+
+  /* Cleanup */
+  unlink(fex_file1);
+  unlink(fex_file2);
+  unlink(regular_file);
+
   printf("\nTest application completed.\n");
   return 0;
 }

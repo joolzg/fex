@@ -6,6 +6,10 @@ An LD_PRELOAD compatible shared library for intercepting file I/O functions.
 
 Fex is a C library that uses LD_PRELOAD to intercept and monitor file I/O system calls and library functions. It can be used for debugging, profiling, or implementing custom file I/O behavior without modifying existing applications.
 
+**Key Feature**: Fex specifically tracks files with the `.fex` extension, maintaining a linked list of opened `.fex` files with their original filename and file size information.
+
+**Important**: Only files opened for read-only access are tracked. Files opened for any write operation (write, append, read-write) are not tracked to preserve the integrity of the original file information.
+
 ## Intercepted Functions
 
 The library intercepts the following functions:
@@ -92,6 +96,9 @@ The included `fex_run.sh` script makes it easy to run applications with FEX:
 # Run with debug output
 ./fex_run.sh --debug cat /etc/hostname
 
+# Run with .fex file status display
+./fex_run.sh --show-status ./my_app arg1 arg2
+
 # Run your own application
 ./fex_run.sh ./my_app arg1 arg2
 ```
@@ -111,6 +118,15 @@ Set the `FEX_DEBUG` environment variable to enable detailed logging:
 ```bash
 export FEX_DEBUG=1
 LD_PRELOAD=./build/src/libfex.so ls /etc
+```
+
+### .fex File Tracking
+
+Set the `FEX_SHOW_STATUS` environment variable to show tracked .fex files on application exit:
+
+```bash
+export FEX_SHOW_STATUS=1
+LD_PRELOAD=./build/src/libfex.so your_application
 ```
 
 ## Example Output

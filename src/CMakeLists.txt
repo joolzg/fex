@@ -2,7 +2,7 @@
 add_library(fex SHARED fex_preload.c)
 
 # Link with required libraries
-target_link_libraries(fex dl)
+target_link_libraries(fex dl pthread)
 
 # Set library properties
 set_target_properties(fex PROPERTIES
