@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+
+    - name: Build
+      run: |
+        cd build
+        make
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure
+
+    - name: Test library loading
+      run: |
+        export LD_PRELOAD=./build/src/libfex.so
+        export FEX_DEBUG=1
+        echo "Testing with ls command:"
+        ls /etc/passwd || true
+
+    - name: Run demo (if available)
+      run: |
+        if [ -f ./demo.sh ]; then
+          ./demo.sh
+        fi
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: fex-library
+        path: |
+          build/src/libfex.so
+          build/src/test_app

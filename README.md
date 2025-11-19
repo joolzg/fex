@@ -72,6 +72,28 @@ your_application
 
 # Method 2: One-line command
 LD_PRELOAD=./build/src/libfex.so FEX_DEBUG=1 your_application
+
+# Method 3: Use the wrapper script (recommended)
+./fex_run.sh your_application
+./fex_run.sh --debug your_application
+```
+
+### Wrapper Script
+
+The included `fex_run.sh` script makes it easy to run applications with FEX:
+
+```bash
+# Show help
+./fex_run.sh --help
+
+# Run command with interception
+./fex_run.sh ls /etc
+
+# Run with debug output
+./fex_run.sh --debug cat /etc/hostname
+
+# Run your own application
+./fex_run.sh ./my_app arg1 arg2
 ```
 
 ### Demo Script
