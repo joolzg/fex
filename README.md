@@ -98,7 +98,7 @@ The `FEX_BLOCK_SIZE` environment variable allows you to tune memory usage and pe
 export FEX_BLOCK_SIZE=8192
 LD_PRELOAD=./build/src/libfex.so your_program
 
-# Example: Use 1KB blocks for memory-constrained systems  
+# Example: Use 1KB blocks for memory-constrained systems
 export FEX_BLOCK_SIZE=1024
 LD_PRELOAD=./build/src/libfex.so your_program
 ```
