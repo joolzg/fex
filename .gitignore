@@ -18,6 +18,14 @@ build-*/
 *.out
 *.app
 fex
+test_*
+!test_*.c
+!test_*.sh
+
+# Temporary test files
+temp_tests/
+*.fex
+/tmp/*.fex
 
 # Libraries
 *.a
@@ -41,5 +49,8 @@ CTestTestfile.cmake
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and debug files
 *.log
+core
+core.*
+*.dmp

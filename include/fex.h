@@ -12,10 +12,21 @@
 
 /* File tracking structure for .fex files */
 typedef struct fex_file_entry {
-  int fd;                      /* File descriptor */
-  FILE *fp;                    /* FILE pointer (if opened with fopen) */
-  char *original_filename;     /* Original filename */
-  off_t original_size;         /* Original file size */
+  int fd;                   /* File descriptor */
+  FILE *fp;                 /* FILE pointer (if opened with fopen) */
+  char *original_filename;  /* Original filename */
+  off_t original_size;      /* Original file size */
+  char *header_string;      /* Generated C header string */
+  char *footer_string;      /* Generated C footer string */
+  off_t simulated_position; /* Current simulated position for seek/tell */
+  off_t simulated_size;     /* Calculated simulated file size */
+  off_t header_len;         /* Length of header string */
+  off_t data_len;           /* Length of data section (6 * original_size) */
+  off_t footer_start;       /* Starting position of footer section */
+  char *buffer;             /* Pre-loaded buffer for efficient reading */
+  size_t block_size;        /* Block size for buffer operations */
+  off_t current_block;      /* Current block number being accessed */
+  FILE *original_fp; /* File pointer to original file for buffer operations */
   struct fex_file_entry *next; /* Next entry in linked list */
 } fex_file_entry_t;
 
@@ -53,10 +64,20 @@ void fex_log(const char *format, ...);
 
 /* File tracking functions */
 int is_fex_file(const char *pathname);
+char *resolve_pathname_at(int dirfd, const char *pathname);
+char *generate_c_variable_name(const char *filename);
+int generate_fex_code_data(const char *filename, off_t original_size,
+                           char **header_string, char **footer_string,
+                           off_t *simulated_size, off_t *header_len,
+                           off_t *data_len, off_t *footer_start);
+off_t get_real_file_position(fex_file_entry_t *entry, off_t simulated_position);
+int get_simulated_character(fex_file_entry_t *entry, off_t position);
+int load_block_into_buffer(fex_file_entry_t *entry, off_t block_number);
+void initialize_fex_buffer(fex_file_entry_t *entry);
+void free_fex_buffer(fex_file_entry_t *entry);
 void track_fex_file_fd(int fd, const char *pathname, int flags);
 void track_fex_file_fp(FILE *fp, const char *pathname, const char *mode);
 void untrack_fex_file_fd(int fd);
 void untrack_fex_file_fp(FILE *fp);
 void print_fex_files_status(void);
-
 #endif // FEX_H
