@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define FEX_DEFAULT_BLOCK_SIZE 4096
 
 static const char hex_table[256][6] = {
     "0x00, ", "0x01, ", "0x02, ", "0x03, ", "0x04, ", "0x05, ", "0x06, ",
@@ -140,6 +141,27 @@ void fex_log(const char *format, ...) {
   fprintf(stderr, "[FEX] ");
   vfprintf(stderr, format, args);
   va_end(args);
+}
+
+/* Get configurable block size from environment variable */
+size_t get_fex_block_size(void) {
+  const char *block_size_str = getenv("FEX_BLOCK_SIZE");
+  if (block_size_str) {
+    char *endptr;
+    unsigned long size = strtoul(block_size_str, &endptr, 10);
+
+    /* Validate the input */
+    if (*endptr == '\0' && size >= 1024 && size <= 1024 * 1024) {
+      /* Valid size between 1KB and 1MB */
+      fex_log("Using custom block size: %lu bytes\n", size);
+      return (size_t)size;
+    } else {
+      fex_log("Invalid FEX_BLOCK_SIZE value '%s', using default %d bytes\n",
+              block_size_str, FEX_DEFAULT_BLOCK_SIZE);
+    }
+  }
+
+  return FEX_DEFAULT_BLOCK_SIZE;
 }
 
 /* ========== .FEX FILE TRACKING FUNCTIONS ========== */
@@ -578,8 +600,8 @@ void initialize_fex_buffer(fex_file_entry_t *entry) {
     return;
   }
 
-  /* Use a reasonable block size (4KB default) */
-  entry->block_size = 4096;
+  /* Use a configurable block size (4KB default) */
+  entry->block_size = get_fex_block_size();
 
   /* Allocate buffer */
   entry->buffer = malloc(entry->block_size);
@@ -1206,9 +1228,9 @@ int stat(const char *pathname, struct stat *statbuf) {
         simulated_size > 0) {
       /* Update stat buffer with simulated values */
       statbuf->st_size = simulated_size;
-      statbuf->st_blksize = 4096; /* Block size of 4096 bytes */
-      statbuf->st_blocks =
-          (simulated_size + 4095) / 4096; /* Round up to blocks */
+      statbuf->st_blksize = get_fex_block_size(); /* Configurable block size */
+      statbuf->st_blocks = (simulated_size + (statbuf->st_blksize - 1)) /
+                           statbuf->st_blksize; /* Round up to blocks */
 
       fex_log("stat() modified .fex file stats: original_size=%ld, "
               "simulated_size=%ld, blocks=%ld\n",
@@ -1235,9 +1257,9 @@ int fstat(int fd, struct stat *statbuf) {
     if (entry) {
       /* Update stat buffer with simulated values from tracked entry */
       statbuf->st_size = entry->simulated_size;
-      statbuf->st_blksize = 4096; /* Block size of 4096 bytes */
-      statbuf->st_blocks =
-          (entry->simulated_size + 4095) / 4096; /* Round up to blocks */
+      statbuf->st_blksize = get_fex_block_size(); /* Configurable block size */
+      statbuf->st_blocks = (entry->simulated_size + (statbuf->st_blksize - 1)) /
+                           statbuf->st_blksize; /* Round up to blocks */
 
       fex_log("fstat() modified tracked .fex file stats: original_size=%ld, "
               "simulated_size=%ld, blocks=%ld\n",
@@ -1276,9 +1298,10 @@ int fstatat(int dirfd, const char *pathname, struct stat *statbuf, int flags) {
           simulated_size > 0) {
         /* Update stat buffer with simulated values */
         statbuf->st_size = simulated_size;
-        statbuf->st_blksize = 4096; /* Block size of 4096 bytes */
-        statbuf->st_blocks =
-            (simulated_size + 4095) / 4096; /* Round up to blocks */
+        statbuf->st_blksize =
+            get_fex_block_size(); /* Configurable block size */
+        statbuf->st_blocks = (simulated_size + (statbuf->st_blksize - 1)) /
+                             statbuf->st_blksize; /* Round up to blocks */
 
         fex_log("fstatat() modified .fex file stats: original_size=%ld, "
                 "simulated_size=%ld, blocks=%ld\n",

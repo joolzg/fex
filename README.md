@@ -56,7 +56,7 @@ LD_PRELOAD=./build/src/libfex.so cat example.fex
 - **Footer**: `};\nunsigned long filename_SIZE = N;`
 
 ### Buffer Management
-- **Block Size**: 4KB chunks loaded on-demand
+- **Block Size**: Configurable chunks (default 4KB) loaded on-demand via `FEX_BLOCK_SIZE`
 - **Hex Table**: Pre-computed 256×6 lookup table for optimal performance
 - **Position Mapping**: Accurate translation between simulated and real positions
 
@@ -68,10 +68,40 @@ LD_PRELOAD=./build/src/libfex.so cat example.fex
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `FEX_DEBUG` | Enable debug logging | `export FEX_DEBUG=1` |
-| `FEX_SHOW_STATUS` | Print file tracking status on exit | `export FEX_SHOW_STATUS=1` |
+| Variable | Description | Default | Valid Range | Example |
+|----------|-------------|---------|-------------|---------|
+| `FEX_DEBUG` | Enable debug logging | disabled | - | `export FEX_DEBUG=1` |
+| `FEX_SHOW_STATUS` | Print file tracking status on exit | disabled | - | `export FEX_SHOW_STATUS=1` |
+| `FEX_BLOCK_SIZE` | Set buffer block size in bytes | 4096 | 1024-1048576 | `export FEX_BLOCK_SIZE=8192` |
+
+### Buffer Size Configuration
+
+The `FEX_BLOCK_SIZE` environment variable allows you to tune memory usage and performance:
+
+**Smaller values (1KB-2KB):**
+- Lower memory usage per file
+- More frequent I/O operations
+- Better for systems with limited memory
+
+**Larger values (64KB-1MB):**
+- Higher memory usage per file
+- Fewer I/O operations for large files
+- Better sequential read performance
+
+**Invalid values:**
+- Below 1KB (1024 bytes): Falls back to default 4KB
+- Above 1MB (1048576 bytes): Falls back to default 4KB
+- Non-numeric values: Falls back to default 4KB
+
+```bash
+# Example: Use 8KB blocks for better performance
+export FEX_BLOCK_SIZE=8192
+LD_PRELOAD=./build/src/libfex.so your_program
+
+# Example: Use 1KB blocks for memory-constrained systems  
+export FEX_BLOCK_SIZE=1024
+LD_PRELOAD=./build/src/libfex.so your_program
+```
 
 ## Advanced Usage
 
